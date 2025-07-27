@@ -15,7 +15,7 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
-app.post('/setTrial', async (req, res) => {
+app.post('/trial', async (req, res) => {
   const { idToken } = req.body;
 
   if (!idToken) return res.status(400).json({ error: 'No idToken provided' });
