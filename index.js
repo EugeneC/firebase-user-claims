@@ -26,8 +26,7 @@ app.post('/trial', async (req, res) => {
 
     const userRecord = await admin.auth().getUser(uid);
     const createdAtMs = new Date(userRecord.metadata.creationTime).getTime();
-    const createdAt = Math.floor(createdAtMs / 1000);
-    const trialExpireDate = createdAt + 7 * 24 * 60 * 60;
+    const trialExpireDate = createdAtMs + 7 * 24 * 60 * 60 * 1000;
 
     if (decoded.trialExpireDate != null) {
       return res.status(400).json({ error: 'Trial already set' });
