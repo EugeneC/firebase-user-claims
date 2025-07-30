@@ -22,15 +22,14 @@ app.post('/trial', async (req, res) => {
 
   try {
     const decoded = await admin.auth().verifyIdToken(idToken);
-    const uid = decoded.uid;
-
-    const userRecord = await admin.auth().getUser(uid);
-    const createdAtMs = new Date(userRecord.metadata.creationTime).getTime();
-    const trialExpireDate = createdAtMs + 7 * 24 * 60 * 60 * 1000;
-
     if (decoded.trialExpireDate != null) {
       return res.status(400).json({ error: 'Trial already set' });
     }
+
+    const uid = decoded.uid;
+    const userRecord = await admin.auth().getUser(uid);
+    const createdAtMs = new Date(userRecord.metadata.creationTime).getTime();
+    const trialExpireDate = createdAtMs + 7 * 24 * 60 * 60 * 1000;
 
     await admin.auth().setCustomUserClaims(uid, {
       trialExpireDate
@@ -43,7 +42,7 @@ app.post('/trial', async (req, res) => {
   }
 });
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${process.env.PORT || 8080}`);
+  console.log(`Server running on port ${process.env.PORT || 3000}`);
 });
