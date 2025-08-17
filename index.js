@@ -12,7 +12,7 @@ const serviceAccount = JSON.parse(
 );
 
 admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
+  credential: admin.credential.cert(serviceAccount),
 });
 
 app.post('/trial', async (req, res) => {
@@ -56,7 +56,7 @@ app.post('/premium', async (req, res) => {
     const uid = decoded.uid;
 
     const adaptyResponse = await fetch(`https://api.adapty.io/api/v2/server-side-api/profile/`, {
-      method: 'POST',
+      method: 'GET',
       headers: {
         'Authorization': `Api-Key ${process.env.ADAPTY_API_KEY}`,
         'Content-Type': 'application/json',
@@ -118,7 +118,7 @@ app.put('/premium', async (req, res) => {
       hasPremium = true;
     } else {
       const adaptyResponse = await fetch(`https://api.adapty.io/api/v2/server-side-api/profile/`, {
-        method: 'POST',
+        method: 'GET',
         headers: {
           'Authorization': `Api-Key ${process.env.ADAPTY_API_KEY}`,
           'Content-Type': 'application/json',
@@ -127,16 +127,13 @@ app.put('/premium', async (req, res) => {
       });
 
       if (!adaptyResponse.ok) {
-        const errText = await adaptyResponse.text();
-        console.error('Adapty error:', errText);
-        return res.status(500).json({ error: 'Failed to fetch subscription from Adapty' });
+        hasPremium = false;
+      } else {
+        const adaptyData = await adaptyResponse.json();
+
+        hasPremium = hasActiveSubscription(adaptyData);
       }
-
-      const adaptyData = await adaptyResponse.json();
-
-      hasPremium = hasActiveSubscription(adaptyData);
     }
-
     
     if (!hasPremium) {
       await admin.auth().setCustomUserClaims(uid, {
@@ -178,6 +175,61 @@ function hasActiveSubscription(adaptyData) {
     return hasStarted && notExpired;
   });
 }
+
+app.post('/notify', async (req, res) => {
+  const { idToken, checklistId, userUids, content } = req.body;
+
+  if (!idToken || !userUids || !content) {
+    return res.status(400).json({ error: 'Missing required fields: idToken, userUids or content.' });
+  }
+
+  const { titles, messages } = content;
+    if (!titles || !messages) {
+    return res.status(400).json({ error: 'Missing content required fields: titles or messages.' });
+  }
+
+  try {
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    const uid = decoded.uid;
+
+    const now = Date.now();
+    if (!decoded.hasPremium && (!decoded.trialExpireDate || now > decoded.trialExpireDate)) {
+      return res.status(500).json({ error: 'User has no permissions.' });
+    }
+
+    const payload = {
+      app_id: process.env.OS_APP_ID,
+      include_external_user_ids: Array.from(userUids),
+      headings: content["titles"],
+      contents: content["messages"],
+      android_channel_id: process.env.OS_ANDROID_CHANNEL_ID,
+      thread_id: `${process.env.ANDROID_PACKAGE_NAME}.checklist_updates`,
+      android_group: `${process.env.ANDROID_PACKAGE_NAME}.checklist_updates`,
+    };
+
+    if (checklistId != null) {
+      payload.data = {
+        checklistId: checklistId,
+        collapse_id: checklistId,
+      };
+    }
+
+    const r = await fetch(`${process.env.OS_API_BASE_URL}/notifications?c=push`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${process.env.OS_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    
+
+    res.json(await r.json());
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: 'Failed' });
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
